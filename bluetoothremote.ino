@@ -1,25 +1,30 @@
 
 #include <BleKeyboard.h>
+#include "esp_pm.h"
+#include "esp_sleep.h"
 
-BleKeyboard bleKeyboard("ESP32C3 Media Keybord","Mendako Lab",50);
+BleKeyboard bleKeyboard("ESP32C3 Bluey","Joevial Devices",100);
 
-#define bt1 0
-#define bt2 1
-#define bt3 3
-#define bt4 4
-#define bt5 5
+#define bt1 4
+#define bt2 0
+#define bt3 6
+#define bt4 1
+#define bt5 3
+#define vBatpin 2
 
 #define every(interval) \
     static uint32_t __every__##interval = millis(); \
     if (millis() - __every__##interval >= interval && (__every__##interval = millis()))
 
 bool playing = false;
-
+ unsigned long previousBlink = 0;
+ int batPct = 100;
+float vBat;
 void setup() {
   Serial.begin(115200);
   Serial.println("Starting BLE work!");
   bleKeyboard.begin();
-
+  pinMode(vBatpin, INPUT);
   pinMode(bt1,INPUT_PULLUP);    //GPIO0(BOOT)をプルアップ付き入力設定
   pinMode(bt2,INPUT_PULLUP);    //GPIO0(BOOT)をプルアップ付き入力設定
   pinMode(bt3,INPUT_PULLUP);    //GPIO0(BOOT)をプルアップ付き入力設定
@@ -27,17 +32,43 @@ void setup() {
   pinMode(bt5,INPUT_PULLUP);    //GPIO0(BOOT)をプルアップ付き入力設定
   pinMode(8, OUTPUT);
   digitalWrite(8, HIGH);
-
+  esp_pm_config_esp32c3_t pm_config = {
+    .max_freq_mhz = 160,
+    .min_freq_mhz = 10,
+    .light_sleep_enable = true
+  };
+  esp_pm_configure(&pm_config);
+   vBat = analogReadMilliVolts(vBatpin) / 500.0; // Read the battery voltage from GPIO2
+   vBat = analogReadMilliVolts(vBatpin) / 500.0; // Read the battery voltage from GPIO2
+  batPct = constrain(mapf(vBat, 3.3, 4.2, 0, 100), 0, 100); // Map and constrain battery percentage
   Serial.println("Starting loop work!");
 }
 
-void loop() {
+double mapf(float x, float in_min, float in_max, float out_min, float out_max){
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
 
+
+
+void loop() {
+  every(1000){
+
+     Serial.print("vBat: ");
+    Serial.print(vBat, 3);
+    Serial.print(" V, Battery Percentage: ");
+    Serial.print(batPct);
+    Serial.println("%");
+  }
   if(bleKeyboard.isConnected()) {
-    every(2000) {
-      digitalWrite(8, LOW);  // Turn LED on
-      delay(10);           // Wait 100ms
-      digitalWrite(8, HIGH);
+    unsigned long blinkInterval = (batPct * 100); // Convert percentage to milliseconds (e.g. 100% = 10000ms)
+    if(millis() - previousBlink >= blinkInterval) {
+       vBat = analogReadMilliVolts(vBatpin) / 500.0; // Read the battery voltage from GPIO2
+       vBat = analogReadMilliVolts(vBatpin) / 500.0; // Read the battery voltage from GPIO2
+      batPct = constrain(mapf(vBat, 3.3, 4.2, 0, 100), 0, 100); // Map and constrain battery percentage
+      digitalWrite(8, LOW);   // Turn LED on
+      delay(10);            // Keep on for 100ms
+      digitalWrite(8, HIGH);  // Turn LED off
+      previousBlink = millis();
     }
     if(digitalRead(bt1) == LOW){
       digitalWrite(8, LOW);
@@ -45,6 +76,7 @@ void loop() {
       bleKeyboard.write(KEY_MEDIA_NEXT_TRACK);
       while (digitalRead(bt1) == LOW){delay(1);}
       digitalWrite(8, HIGH);
+      
     }
     if(digitalRead(bt2) == LOW){
       digitalWrite(8, LOW);
@@ -52,6 +84,7 @@ void loop() {
       bleKeyboard.write(KEY_MEDIA_PREVIOUS_TRACK);
       while (digitalRead(bt2) == LOW){delay(1);}
       digitalWrite(8, HIGH);
+      
     }
 
 
@@ -69,6 +102,7 @@ void loop() {
       }
       while (digitalRead(bt3) == LOW){delay(1);}
       digitalWrite(8, HIGH);
+      
     }
 
 
@@ -94,6 +128,7 @@ void loop() {
        // }
       }
       digitalWrite(8, HIGH);
+      
     }
 
     if(digitalRead(bt5) == LOW){
@@ -118,9 +153,17 @@ void loop() {
         }
       }
       digitalWrite(8, HIGH);
+      
+    }
+    
+  }
+  else {
+    if(millis() - previousBlink >= 250) {
+      digitalWrite(8, LOW);   // Turn LED on
+      delay(10);            // Keep on for 100ms
+      digitalWrite(8, HIGH);  // Turn LED off
+      previousBlink = millis();
     }
   }
-  //every(2000){
-  //  Serial.print("Ping...");
- // }
+
 }
